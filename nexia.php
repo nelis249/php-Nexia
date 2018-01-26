@@ -3,47 +3,47 @@
 class Nexia
 {
 	/**
-     * @var string $LoginId - username for the Nexia site.
-     */
+	 * @var string $LoginId - username for the Nexia site.
+	 */
 	protected $LoginId;
 	/**
-     * @var string $Credential - password for the Nexia site.
-     */
+	 * @var string $Credential - password for the Nexia site.
+	 */
 	protected $Credential;
 	/**
-     * @var string $HouseId - the house id defined by the Nexia site. To find this logon to the site and go to
+	 * @var string $HouseId - the house id defined by the Nexia site. To find this logon to the site and go to
 	 * one of the sub areas then look at the URL. It will resemble this: https://www.mynexia.com/houses/888888/climate/index
 	 * In this example the house id is 888888
-     */
+	 */
 	protected $HouseId;
-	
+
 	// constants, shouldn't have to modify
 	private $nexiaUrl = "https://www.mynexia.com";
 	private $cookieFile;
 	private $cookieExpiry = 600;
-	
+
 	/**
-     * Create a new instance and authenticates the session establishing the cookie data.
-     *
-     * @param string $login Username for Nexia site
-     * @param string $cred Password for Nexia site
-     * @param string $houseId House id from Nexia site
-     * @param string $forceNew Specify true to ignore cookie data and force new authentication
-     */
-	public function __construct($login, $cred, $houseId, $forceNew = false)
-    {
-        $this->LoginId = $login;
-        $this->Credential = $cred;
-        $this->HouseId = $houseId;
-		$this->cookieFile = dirname(__FILE__)."\\nexia_cookies.txt";
-        $this->Initialize($forceNew);
-    }
-	
-	/**
-     * Method to initialize the session and set up the cookies for the subsequent calls.
+	 * Create a new instance and authenticates the session establishing the cookie data.
 	 *
-     * @param bool $forceNew Specify true to force renewal of the credentials.
-     */
+	 * @param string $login Username for Nexia site
+	 * @param string $cred Password for Nexia site
+	 * @param string $houseId House id from Nexia site
+	 * @param string $forceNew Specify true to ignore cookie data and force new authentication
+	 */
+	public function __construct($login, $cred, $houseId, $forceNew = false)
+	{
+		$this->LoginId = $login;
+		$this->Credential = $cred;
+		$this->HouseId = $houseId;
+		$this->cookieFile = dirname(__FILE__)."\\nexia_cookies.txt";
+		$this->Initialize($forceNew);
+	}
+
+	/**
+	 * Method to initialize the session and set up the cookies for the subsequent calls.
+	 *
+	 * @param bool $forceNew Specify true to force renewal of the credentials.
+	 */
 	protected function Initialize($forceNew)
 	{
 		$crl = $this->GetCurlObject();
@@ -110,14 +110,14 @@ class Nexia
 			}
 		}
 	}
-	
+
 	/**
-     * Method to get the current temperature of a specific thermostat.
-     *
-     * @param int/string $thermoNameOrIndex Specify the zero indexed number for a thermostat or the friendly name.
+	 * Method to get the current temperature of a specific thermostat.
 	 *
-     * @return string The current temperature on the specified thermostat.
-     */
+	 * @param int/string $thermoNameOrIndex Specify the zero indexed number for a thermostat or the friendly name.
+	 *
+	 * @return string The current temperature on the specified thermostat.
+	 */
 	public function GetThermostatTemperature($thermoNameOrIndex)
 	{
 		$json = $this->GetThermostatData();
@@ -131,14 +131,14 @@ class Nexia
 		
 		return $json[$thermoNameOrIndex]->zones[0]->temperature;
 	}
-	
+
 	/**
-     * Method to get the target temperature of a specific thermostat [e.g. what the thermostat is set to].
-     *
-     * @param int/string $thermoNameOrIndex Specify the zero indexed number for a thermostat or the friendly name.
+	 * Method to get the target temperature of a specific thermostat [e.g. what the thermostat is set to].
 	 *
-     * @return string The current set point temperature on the specified thermostat.
-     */
+	 * @param int/string $thermoNameOrIndex Specify the zero indexed number for a thermostat or the friendly name.
+	 *
+	 * @return string The current set point temperature on the specified thermostat.
+	 */
 	public function GetThermostatSetPoint($thermoNameOrIndex)
 	{
 		$json = $this->GetThermostatData();
@@ -159,12 +159,12 @@ class Nexia
 		}
 		return -1;
 	}
-	
+
 	/**
-     * Method to get a reformatted version of the json data versus the giant one from nexia that has a bunch of unneeded info
+	 * Method to get a reformatted version of the json data versus the giant one from nexia that has a bunch of unneeded info
 	 *
-     * @return json A shortened version of a JSON object for the thermostats.
-     */
+	 * @return json A shortened version of a JSON object for the thermostats.
+	 */
 	public function GetThermostatJsonData()
 	{
 		$json = $this->GetThermostatData();
@@ -190,15 +190,15 @@ class Nexia
 		}
 		return json_encode($therms);
 	}
-	
+
 	/**
-     * Method to set the temperature on a thermostat
-     *
-     * @param int/string $thermoNameOrIndex Specify the zero indexed number for a thermostat or the friendly name.
-     * @param int $temp Temperature to set on the specified thermostat.
+	 * Method to set the temperature on a thermostat
 	 *
-     * @return bool True if successful; otherwise false.
-     */
+	 * @param int/string $thermoNameOrIndex Specify the zero indexed number for a thermostat or the friendly name.
+	 * @param int $temp Temperature to set on the specified thermostat.
+	 *
+	 * @return bool True if successful; otherwise false.
+	 */
 	public function SetTemperature($thermoNameOrIndex, $temp)
 	{
 		$json = $this->GetThermostatData();
@@ -252,15 +252,15 @@ class Nexia
 		}
 		return true;
 	}
-	
+
 	/**
-     * Method to get a thermostat index by friendly display name.
-     *
-     * @param string $thermoName Specify the thermostat friendly name.
-     * @param json $jsonData Provide the json data from the GetThermostatData() call.
+	 * Method to get a thermostat index by friendly display name.
 	 *
-     * @return int The index position of the thermostat based on the friendly name provided.
-     */
+	 * @param string $thermoName Specify the thermostat friendly name.
+	 * @param json $jsonData Provide the json data from the GetThermostatData() call.
+	 *
+	 * @return int The index position of the thermostat based on the friendly name provided.
+	 */
 	private function GetIndexByName($thermoName, $jsonData)
 	{
 		// if not a number maybe a name so check through them
@@ -276,14 +276,14 @@ class Nexia
 		}
 		throw new Exception("Could not find the thermostat with the name '".$thermoName."'.");
 	}
-	
+
 	/**
-     * Method to get the thermostat json object that contains the current state of all the thermostats on the account.
+	 * Method to get the thermostat json object that contains the current state of all the thermostats on the account.
 	 * The data is imbedded in a giant java script which is then processed on the web page so look for the java script
 	 * and pull out the json data
 	 *
-     * @return json The full raw JSON object from Nexia.
-     */
+	 * @return json The full raw JSON object from Nexia.
+	 */
 	private function GetThermostatData()
 	{
 		$crl = $this->GetCurlObject();
@@ -306,12 +306,12 @@ class Nexia
 		$stack = json_decode($data);
 		return $stack;
 	}
-	
+
 	/**
-     * Method to get the standard curl object with the proper headers.
+	 * Method to get the standard curl object with the proper headers.
 	 *
-     * @return object The curl object for web calls.
-     */
+	 * @return object The curl object for web calls.
+	 */
 	private function GetCurlObject()
 	{
 		$crl = curl_init();
