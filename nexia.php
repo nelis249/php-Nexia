@@ -17,6 +17,11 @@ class Nexia
 	 */
 	protected $HouseId;
 
+	/**
+	 * @var string $Token - the X-CSRF-Token retrieved at logon and must be present in all post/put headers after logon
+	 */
+	private $Token;
+	
 	// constants, shouldn't have to modify
 	private $nexiaUrl = "https://www.mynexia.com";
 	private $cookieFile;
@@ -68,7 +73,11 @@ class Nexia
 			}
 			
 			// get auth token from login page to post during authentication
-			preg_match('/name="authenticity_token" type="hidden" value="(?<authKey>.*)" \/><\/div>/',$ret,$matches);
+			preg_match('/type="hidden" name="authenticity_token" value="(?<authKey>.*)"/',$ret,$matches);
+			if(!array_key_exists("authKey",$matches))
+			{
+				throw new Exception("Could not find the 'authenticity_token' in the returned data. Check the logon page and it's content to see if the element format was changed.");
+			}
 			$authKey = $matches['authKey'];
 
 			$data = array('utf8'=>'?',
@@ -84,33 +93,40 @@ class Nexia
 			curl_setopt ($crl, CURLOPT_POSTFIELDS, http_build_query($data));
 			// executing established the cookies for the session
 			$ret = curl_exec($crl);
+		}
 		
-			// after logon do a get on the main URL to verify credentials
-			// if 302 the credentials are invalid andf is redirected to the login page
-			// if 200 is returned then credentials were good
-			curl_setopt ($crl, CURLOPT_URL, $this->nexiaUrl);
-			curl_setopt ($crl, CURLOPT_CUSTOMREQUEST, 'GET');
-			$ret = curl_exec($crl);
-			$statuscode = curl_getinfo($crl, CURLINFO_HTTP_CODE);
-			curl_close($crl);
+		// after logon do a get on the main URL to verify credentials
+		// if 302 the credentials are invalid and is redirected to the login page
+		// if 200 is returned then credentials were good
+		curl_setopt ($crl, CURLOPT_URL, $this->nexiaUrl);
+		curl_setopt ($crl, CURLOPT_CUSTOMREQUEST, 'GET');
+		$ret = curl_exec($crl);
+		$statuscode = curl_getinfo($crl, CURLINFO_HTTP_CODE);
+		curl_close($crl);
 
-			if($statuscode!=200)
-			{
-				throw new Exception("Invalid login. Check credentials for Nexia.");
-			}
-			// finally get the house id from the page and verify it
-			preg_match('/window.Nexia.modes.houseId = (?<houseId>.*);/',$ret,$matches);
-			
-			// one might argue why not just get the house id? Well for subsequent calls we don't want to have
-			// to keep polling for the information so it is only validated that it's correct. This saves
-			// a 'GET' and parse for every call
-			if($this->HouseId != $matches['houseId'])
-			{
-				throw new Exception("The house id specified [".$this->HouseId."] does not match the Nexia account [".$matches['houseId']."].");
-			}
+		if($statuscode!=200)
+		{
+			throw new Exception("Invalid login. Check credentials for Nexia.");
+		}
+		preg_match('/meta name="csrf-token" content="(?<token>.*)"/',$ret,$matches);
+		if(!array_key_exists("token",$matches))
+		{
+			throw new Exception("Could not find the 'csrf-token' in the returned data.");
+		}
+		$this->Token = $matches['token'];
+
+		// finally get the house id from the page and verify it
+		preg_match('/window.Nexia.modes.houseId = (?<houseId>.*);/',$ret,$matches);
+		
+		// one might argue why not just get the house id? Well for subsequent calls we don't want to have
+		// to keep polling for the information so it is only validated that it's correct. This saves
+		// a 'GET' and parse for every call
+		if($this->HouseId != $matches['houseId'])
+		{
+			throw new Exception("The house id specified [".$this->HouseId."] does not match the Nexia account [".$matches['houseId']."].");
 		}
 	}
-
+	
 	/**
 	 * Method to get the current temperature of a specific thermostat.
 	 *
@@ -121,7 +137,8 @@ class Nexia
 	public function GetThermostatTemperature($thermoNameOrIndex)
 	{
 		$json = $this->GetThermostatData();
-		if(!is_numeric($thermoNameOrIndex)) {
+		if(!is_numeric($thermoNameOrIndex))
+		{
 			$thermoNameOrIndex = $this->GetIndexByName($thermoNameOrIndex, $json);
 		}
 		if($thermoNameOrIndex > (sizeof($json)-1))
@@ -142,7 +159,8 @@ class Nexia
 	public function GetThermostatSetPoint($thermoNameOrIndex)
 	{
 		$json = $this->GetThermostatData();
-		if(!is_numeric($thermoNameOrIndex)) {
+		if(!is_numeric($thermoNameOrIndex))
+		{
 			$thermoNameOrIndex = $this->GetIndexByName($thermoNameOrIndex, $json);
 		}
 		if($thermoNameOrIndex > (sizeof($json)-1))
@@ -202,7 +220,8 @@ class Nexia
 	public function SetTemperature($thermoNameOrIndex, $temp)
 	{
 		$json = $this->GetThermostatData();
-		if(!is_numeric($thermoNameOrIndex)) {
+		if(!is_numeric($thermoNameOrIndex))
+		{
 			$thermoNameOrIndex = $this->GetIndexByName($thermoNameOrIndex, $json);
 		}
 		if($thermoNameOrIndex > (sizeof($json)-1))
@@ -235,8 +254,10 @@ class Nexia
 		curl_setopt ($crl, CURLOPT_CUSTOMREQUEST, 'PUT');
 		curl_setopt ($crl, CURLOPT_URL, $this->nexiaUrl."/houses/".$this->HouseId."/xxl_zones/".$zone->id."/setpoints");
 		// put has to be content-type application/json or the page will not accept it
+		// put also requires csrf token as of jun/2018
 		curl_setopt ($crl, CURLOPT_HTTPHEADER, array(
 			'Content-Type:application/json',
+			'X-CSRF-Token:'.$this->Token,
 			'Accept-Language:en-US,en,q=0.8',
 			'Connection:keep-alive',
 			'User-Agent:Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/63.0.3239.132 Safari/537.36'
@@ -288,11 +309,15 @@ class Nexia
 	{
 		$crl = $this->GetCurlObject();
 		curl_setopt ($crl, CURLOPT_CUSTOMREQUEST, 'GET');
-		curl_setopt ($crl, CURLOPT_URL, $this->nexiaUrl."/houses/".$this->HouseId."/climate/index");
+		curl_setopt ($crl, CURLOPT_URL, $this->nexiaUrl."/houses/".$this->HouseId."/climate");
 		$ret = curl_exec($crl);
 		$statuscode = curl_getinfo($crl, CURLINFO_HTTP_CODE);
 		if($statuscode!=200)
 		{
+			if($statuscode==301)
+			{
+				throw new Exception("The 'GetThermostatData' URL is no longer valid. The code must be updated to handle the new path.");
+			}
 			$this->Initialize(true);
 			return $this->GetThermostatData();
 			//throw new Exception("The session appears to be stale. Invalid status code returned [".$statuscode."].");
