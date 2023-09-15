@@ -12,7 +12,7 @@ class Nexia
 	protected $Credential;
 	/**
 	 * @var string $HouseId - the house id defined by the Nexia site. To find this logon to the site and go to
-	 * one of the sub areas then look at the URL. It will resemble this: https://www.mynexia.com/houses/888888/climate/index
+	 * one of the sub areas then look at the URL. It will resemble this: https://tranehome.com/houses/888888/climate/index
 	 * In this example the house id is 888888
 	 */
 	protected $HouseId;
@@ -23,7 +23,7 @@ class Nexia
 	private $Token;
 	
 	// constants, shouldn't have to modify
-	private $nexiaUrl = "https://www.mynexia.com";
+	private $nexiaUrl = "https://tranehome.com";
 	private $cookieFile;
 	private $cookieExpiry = 600;
 
@@ -130,50 +130,42 @@ class Nexia
 	/**
 	 * Method to get the current temperature of a specific thermostat.
 	 *
-	 * @param int/string $thermoNameOrIndex Specify the zero indexed number for a thermostat or the friendly name.
+	 * @param int/string $thermoNameOrId Specify the id number for a thermostat or the friendly name.
 	 *
 	 * @return string The current temperature on the specified thermostat.
 	 */
-	public function GetThermostatTemperature($thermoNameOrIndex)
+	public function GetThermostatTemperature($thermoNameOrId)
 	{
-		$json = $this->GetThermostatData();
-		if(!is_numeric($thermoNameOrIndex))
+		if(empty($thermoNameOrId))
 		{
-			$thermoNameOrIndex = $this->GetIndexByName($thermoNameOrIndex, $json);
+			throw new Exception("Must provide the 'thermoNameOrId' parameter.");
 		}
-		if($thermoNameOrIndex > (sizeof($json)-1))
-		{
-			throw new Exception("The specified thermostat out of range. There are only ".sizeof($json)." devices detected.");
-		}
-		
-		return $json[$thermoNameOrIndex]->zones[0]->temperature;
+		$thermo = $this->GetThermostatData($thermoNameOrId);
+		return $thermo->zones[0]->temperature;
 	}
 
 	/**
 	 * Method to get the target temperature of a specific thermostat [e.g. what the thermostat is set to].
 	 *
-	 * @param int/string $thermoNameOrIndex Specify the zero indexed number for a thermostat or the friendly name.
+	 * @param int/string $thermoNameOrId Specify the id number for a thermostat or the friendly name.
 	 *
 	 * @return string The current set point temperature on the specified thermostat.
 	 */
-	public function GetThermostatSetPoint($thermoNameOrIndex)
+	public function GetThermostatSetPoint($thermoNameOrId)
 	{
-		$json = $this->GetThermostatData();
-		if(!is_numeric($thermoNameOrIndex))
+		if(empty($thermoNameOrId))
 		{
-			$thermoNameOrIndex = $this->GetIndexByName($thermoNameOrIndex, $json);
+			throw new Exception("Must provide the 'thermoNameOrId' parameter.");
 		}
-		if($thermoNameOrIndex > (sizeof($json)-1))
+		$thermo = $this->GetThermostatData($thermoNameOrId);
+		
+		if($thermo->operating_mode=="COOL")
 		{
-			throw new Exception("The specified thermostat out of range. There are only ".sizeof($json)." devices detected.");
+			return $thermo->zones[0]->cooling_setpoint;
 		}
-		if($json[$thermoNameOrIndex]->operating_mode=="COOL")
+		if($thermo->operating_mode=="HEAT")
 		{
-			return $json[$thermoNameOrIndex]->zones[0]->cooling_setpoint;
-		}
-		if($json[$thermoNameOrIndex]->operating_mode=="HEAT")
-		{
-			return $json[$thermoNameOrIndex]->zones[0]->heating_setpoint;
+			return $thermo->zones[0]->heating_setpoint;
 		}
 		return -1;
 	}
@@ -181,21 +173,22 @@ class Nexia
 	/**
 	 * Method to get a reformatted version of the json data versus the giant one from nexia that has a bunch of unneeded info
 	 *
-	 * @return json A shortened version of a JSON object for the thermostats.
+	 * @return string	A JSON string that is a shortened version of a JSON object for the thermostats.
 	 */
 	public function GetThermostatJsonData()
 	{
-		$json = $this->GetThermostatData();
-
+		$json = $this->GetThermostatData(null);
+		
 		$therms = array();
 		$position = 0;
 		foreach($json as $thermo)
 		{
 			$extended = new stdClass;  
 			$extended->name=$thermo->name;  
-			$extended->id=$position++;
+			$extended->id=$thermo->id;
 			$extended->temperature=$thermo->zones[0]->temperature;
 			$extended->mode=$thermo->operating_mode;
+
 			if($extended->mode=="COOL")
 			{
 				$extended->setpoint=$thermo->zones[0]->cooling_setpoint;
@@ -212,26 +205,23 @@ class Nexia
 	/**
 	 * Method to set the temperature on a thermostat
 	 *
-	 * @param int/string $thermoNameOrIndex Specify the zero indexed number for a thermostat or the friendly name.
+	 * @param int/string $thermoNameOrId Specify the id number for a thermostat or the friendly name.
 	 * @param int $temp Temperature to set on the specified thermostat.
 	 *
 	 * @return bool True if successful; otherwise false.
 	 */
-	public function SetTemperature($thermoNameOrIndex, $temp)
+	public function SetTemperature($thermoNameOrId, $temp)
 	{
-		$json = $this->GetThermostatData();
-		if(!is_numeric($thermoNameOrIndex))
+		if(empty($thermoNameOrId))
 		{
-			$thermoNameOrIndex = $this->GetIndexByName($thermoNameOrIndex, $json);
+			throw new Exception("Must provide the 'thermoNameOrId' parameter.");
 		}
-		if($thermoNameOrIndex > (sizeof($json)-1))
-		{
-			throw new Exception("The specified thermostat out of range. There are only ".sizeof($json)." devices detected.");
-		}
+		$thermo = $this->GetThermostatData($thermoNameOrId);
 		
-		$zone = $json[$thermoNameOrIndex]->zones[0];
+		$zone = $thermo->zones[0];
+		
 		// the nexia PUT requires that both cool and heat are sent to it even if only changing one of them
-		if($json[$thermoNameOrIndex]->operating_mode=="COOL")
+		if($targetThermo->operating_mode=="COOL")
 		{
 			$data = array(
 					'cooling_setpoint'=>(int)$temp,
@@ -240,7 +230,7 @@ class Nexia
 					'heating_integer'=>$zone->heating_setpoint
 					);
 		}
-		if($json[$thermoNameOrIndex]->operating_mode=="HEAT")
+		if($targetThermo->operating_mode=="HEAT")
 		{
 			$data = array(
 					'cooling_setpoint'=>(int)$zone->cooling_setpoint,	// send same data
@@ -252,7 +242,7 @@ class Nexia
 		
 		$crl = $this->GetCurlObject();
 		curl_setopt ($crl, CURLOPT_CUSTOMREQUEST, 'PUT');
-		curl_setopt ($crl, CURLOPT_URL, $this->nexiaUrl."/houses/".$this->HouseId."/xxl_zones/".$zone->id."/setpoints");
+		curl_setopt ($crl, CURLOPT_URL, $this->nexiaUrl."/houses/".$this->HouseId."/xxl_zones/".$thermo->id."/setpoints");
 		// put has to be content-type application/json or the page will not accept it
 		// put also requires csrf token as of jun/2018
 		curl_setopt ($crl, CURLOPT_HTTPHEADER, array(
@@ -275,37 +265,16 @@ class Nexia
 	}
 
 	/**
-	 * Method to get a thermostat index by friendly display name.
-	 *
-	 * @param string $thermoName Specify the thermostat friendly name.
-	 * @param json $jsonData Provide the json data from the GetThermostatData() call.
-	 *
-	 * @return int The index position of the thermostat based on the friendly name provided.
-	 */
-	private function GetIndexByName($thermoName, $jsonData)
-	{
-		// if not a number maybe a name so check through them
-		$targetName = strtolower($thermoName);
-		$position = 0;
-		foreach($jsonData as $thermo)
-		{
-			if($targetName == strtolower($thermo->name))
-			{
-				return $position;
-			}
-			$position++;
-		}
-		throw new Exception("Could not find the thermostat with the name '".$thermoName."'.");
-	}
-
-	/**
 	 * Method to get the thermostat json object that contains the current state of all the thermostats on the account.
-	 * The data is imbedded in a giant java script which is then processed on the web page so look for the java script
+	 * The data is embedded in a giant java script which is then processed on the web page so look for the java script
 	 * and pull out the json data
 	 *
-	 * @return json The full raw JSON object from Nexia.
+	 * @param int/string $thermoNameOrId Specify the id number for a thermostat or the friendly name.
+	 *                                   If none specified, returns all devices found
+	 *
+	 * @return JSON The full raw JSON object from Nexia.
 	 */
-	private function GetThermostatData()
+	private function GetThermostatData($thermoNameOrId)
 	{
 		$crl = $this->GetCurlObject();
 		curl_setopt ($crl, CURLOPT_CUSTOMREQUEST, 'GET');
@@ -319,7 +288,7 @@ class Nexia
 				throw new Exception("The 'GetThermostatData' URL is no longer valid. The code must be updated to handle the new path.");
 			}
 			$this->Initialize(true);
-			return $this->GetThermostatData();
+			return $this->GetThermostatData($thermoNameOrId);
 			//throw new Exception("The session appears to be stale. Invalid status code returned [".$statuscode."].");
 		}
 			
@@ -329,7 +298,69 @@ class Nexia
 		curl_close($crl);
 
 		$stack = json_decode($data);
+		if($thermoNameOrId != null)
+		{
+			// look through the stack for the id or name
+			foreach($stack as $thermo)
+			{
+				if($thermo->id == $thermoNameOrId) { return $thermo; }
+				if(strtolower($thermo->name) == strtolower($thermoNameOrId)) { return $thermo; }
+			}
+			// if here then not found
+			throw new Exception("Could not find the thermostat with the name or id '".$thermoNameOrId."'.");
+		}
 		return $stack;
+	}
+
+	/**
+	 * Method to get the historical data of a thermostat for the previous 8 days (includes current day)
+	 *
+	 * @param int/string $thermoNameOrId Specify the id number for a thermostat or the friendly name.
+	 * @param bool		 $annual 		 Specify true to get the past years of data grouped by months.
+	 *
+	 * @return JSON object of all the data for the thermostat.
+	 */
+	public function GetThermostatHistoricalData($thermoNameOrId, $annual = false)
+	{
+		if(empty($thermoNameOrId))
+		{
+			throw new Exception("Must provide the 'thermoNameOrId' parameter.");
+		}
+		$thermo = $this->GetThermostatData($thermoNameOrId);
+		$url = $this->nexiaUrl."/xxl_history/".$thermo->id."/daily_history.csv";
+		if($annual)
+		{
+			$url = $this->nexiaUrl."/xxl_history/".$thermo->id."/monthly_history.csv";
+		}
+		
+		$crl = $this->GetCurlObject();
+		curl_setopt ($crl, CURLOPT_CUSTOMREQUEST, 'GET');
+		curl_setopt ($crl, CURLOPT_URL, $url);
+		$ret = curl_exec($crl);
+		$statuscode = curl_getinfo($crl, CURLINFO_HTTP_CODE);
+		if($statuscode!=200)
+		{
+			if($statuscode==301)
+			{
+				throw new Exception("The 'GetThermostatHistoricalData' URL is no longer valid. The code must be updated to handle the new path.");
+			}
+			throw new Exception("Failed to get historical data for the thermostat '".$thermoNameOrId."'.");
+		}
+		
+		// now convert the returned csv data into json format
+		$headers = null;
+		$data = array();
+		foreach(preg_split("/((\r?\n)|(\r\n?))/", $ret) as $line){
+			if(empty($line)) { continue; }
+			if($headers == null)
+			{
+				$headers = str_getcsv($line);
+				continue;
+			}
+			$data[] = array_combine($headers, str_getcsv($line));
+		} 
+		
+		return $data;
 	}
 
 	/**
