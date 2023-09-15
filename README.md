@@ -1,5 +1,5 @@
 # php-Nexia
-A simple php class to interact with Nexia thermostats
+A simple php class to interact with Trane (Nexia) thermostats. I didn't feel like rebranding everything to 'Trane' and their API still has Nexia in the output so just leaving the naming as is.
 
 # Example
 $nexia = new Nexia($username,$password,$houseId);
